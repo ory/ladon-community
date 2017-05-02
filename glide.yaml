@@ -1,0 +1,10 @@
+package: github.com/ory/ladon-community
+import:
+- package: github.com/Sirupsen/logrus
+- package: github.com/go-redis/redis
+- package: github.com/ory-am/ladon
+- package: github.com/pkg/errors
+- package: golang.org/x/net
+  subpackages:
+  - context
+- package: gopkg.in/gorethink/gorethink.v3
