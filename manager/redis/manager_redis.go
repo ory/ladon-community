@@ -51,7 +51,7 @@ func (m *RedisManager) Create(policy Policy) error {
 }
 
 // GetAll retrieves a all policy.
-func (m *RedisManager) GetAll() (Policies, error) {
+func (m *RedisManager) GetAll(limit int64, offset int64) (Policies, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -98,6 +98,10 @@ func (m *RedisManager) FindRequestCandidates(r *Request) (Policies, error) {
 	}
 
 	return ps, nil
+}
+
+func (m *RedisManager) Update(policy Policy) error {
+	return nil
 }
 
 func redisUnmarshalPolicy(policy []byte) (Policy, error) {
