@@ -8,13 +8,13 @@ import (
 
 	"github.com/go-redis/redis"
 	"github.com/google/go-cmp/cmp"
-	"github.com/ory/ladon"
+	. "github.com/ory/ladon"
 	"gopkg.in/ory-am/dockertest.v3"
 )
 
 var db *redis.Client
 
-func contains(s []ladon.Policy, p ladon.Policy) bool {
+func contains(s []Policy, p Policy) bool {
 	for _, v := range s {
 		if cmp.Equal(v, p) {
 			return true
@@ -65,7 +65,7 @@ func TestCreate(t *testing.T) {
 	m := NewRedisManager(db, "create")
 
 	t.Run("Successfully create a single resource", func(t *testing.T) {
-		policy := &ladon.DefaultPolicy{
+		policy := &DefaultPolicy{
 			ID: "example-policy-1",
 		}
 		err := m.Create(policy)
@@ -75,7 +75,7 @@ func TestCreate(t *testing.T) {
 	})
 
 	t.Run("Error when creating duplicate policies", func(t *testing.T) {
-		policy := &ladon.DefaultPolicy{
+		policy := &DefaultPolicy{
 			ID: "example-policy-2",
 		}
 		err := m.Create(policy)
@@ -95,10 +95,10 @@ func TestGet(t *testing.T) {
 
 	t.Run("Successfully retrieve a single policy", func(t *testing.T) {
 		// Some weirdness with json.Marshal requires us to initialize Conditions for this test
-		policy := &ladon.DefaultPolicy{
+		policy := &DefaultPolicy{
 			ID:         "example-policy-1",
 			Subjects:   []string{"1", "2"},
-			Conditions: ladon.Conditions{},
+			Conditions: Conditions{},
 		}
 		err := m.Create(policy)
 		if err != nil {
@@ -116,7 +116,7 @@ func TestGet(t *testing.T) {
 
 	t.Run("Attempt to retrieve a non-existent policy", func(t *testing.T) {
 		_, err := m.Get("policy that doesn't exist")
-		if err != ladon.ErrNotFound {
+		if err != ErrNotFound {
 			t.Fatal("Attempting to get a policy that doesn't exist should return an error")
 		}
 	})
@@ -127,10 +127,10 @@ func TestUpdate(t *testing.T) {
 
 	t.Run("Successfully update a policy", func(t *testing.T) {
 		// Some weirdness with json.Marshal requires us to initialize Conditions for this test
-		policy := &ladon.DefaultPolicy{
+		policy := &DefaultPolicy{
 			ID:         "example-policy-1",
 			Subjects:   []string{"1", "2"},
-			Conditions: ladon.Conditions{},
+			Conditions: Conditions{},
 		}
 		err := m.Create(policy)
 		if err != nil {
@@ -153,9 +153,9 @@ func TestUpdate(t *testing.T) {
 	})
 
 	t.Run("Attempt to update a policy that doesn't exist", func(t *testing.T) {
-		if err := m.Update(&ladon.DefaultPolicy{
+		if err := m.Update(&DefaultPolicy{
 			ID: "this policy does not exist",
-		}); err != ladon.ErrNotFound {
+		}); err != ErrNotFound {
 			t.Fatal("No error returned when attempting to update a policy that does not exist")
 		}
 	})
@@ -166,10 +166,10 @@ func TestDelete(t *testing.T) {
 
 	t.Run("Successfully delete a policy", func(t *testing.T) {
 		// Some weirdness with json.Marshal requires us to initialize Conditions for this test
-		policy := &ladon.DefaultPolicy{
+		policy := &DefaultPolicy{
 			ID:         "example-policy-1",
 			Subjects:   []string{"1", "2"},
-			Conditions: ladon.Conditions{},
+			Conditions: Conditions{},
 		}
 		err := m.Create(policy)
 		if err != nil {
@@ -182,7 +182,7 @@ func TestDelete(t *testing.T) {
 	})
 
 	t.Run("Attempt to delete a policy that does not exist", func(t *testing.T) {
-		if err := m.Delete("this policy does not exist"); err != ladon.ErrNotFound {
+		if err := m.Delete("this policy does not exist"); err != ErrNotFound {
 			t.Fatal("No error returned when attempting to delete a policy that does not exist")
 		}
 	})
@@ -191,18 +191,18 @@ func TestDelete(t *testing.T) {
 func TestFindRequestCandidate(t *testing.T) {
 	m := NewRedisManager(db, "find")
 
-	policies := ladon.Policies{
-		&ladon.DefaultPolicy{
+	policies := Policies{
+		&DefaultPolicy{
 			ID:         "test-policy-1",
-			Conditions: ladon.Conditions{},
+			Conditions: Conditions{},
 		},
-		&ladon.DefaultPolicy{
+		&DefaultPolicy{
 			ID:         "test-policy-2",
-			Conditions: ladon.Conditions{},
+			Conditions: Conditions{},
 		},
-		&ladon.DefaultPolicy{
+		&DefaultPolicy{
 			ID:         "test-policy-3",
-			Conditions: ladon.Conditions{},
+			Conditions: Conditions{},
 		},
 	}
 
@@ -219,7 +219,80 @@ func TestFindRequestCandidate(t *testing.T) {
 
 	for _, v := range policies {
 		if contains(p, v) != true {
-			t.Fatalf("Policy %+v not found", v)
+			t.Fatalf("Policy %+v not found in original", v)
+		}
+	}
+
+	for _, v := range policies {
+		if contains(p, v) != true {
+			t.Fatalf("Policy %+v not found in returned policies", v)
+		}
+	}
+}
+
+func TestWithWarden(t *testing.T) {
+	m := NewRedisManager(db, "create")
+	w := &Ladon{
+		Manager: m,
+	}
+
+	policies := Policies{
+		&DefaultPolicy{
+			ID:         "test-policy-1",
+			Subjects:   []string{"user:example", "group:example"},
+			Resources:  []string{"resource:example1"},
+			Actions:    []string{"get"},
+			Effect:     AllowAccess,
+			Conditions: Conditions{},
+		},
+		&DefaultPolicy{
+			ID:         "test-policy-2",
+			Subjects:   []string{"user:example"},
+			Resources:  []string{"resource:example2"},
+			Actions:    []string{"get"},
+			Effect:     AllowAccess,
+			Conditions: Conditions{},
+		},
+		&DefaultPolicy{
+			ID:         "test-policy-3",
+			Subjects:   []string{"user:example"},
+			Resources:  []string{"resource:example3"},
+			Actions:    []string{"get"},
+			Effect:     DenyAccess,
+			Conditions: Conditions{},
+		},
+	}
+
+	for _, v := range policies {
+		if err := m.Create(v); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	type Case struct {
+		Request   *Request
+		CanAccess bool
+	}
+
+	tests := []Case{
+		{
+			Request: &Request{
+				Resource: "resource:example1",
+				Action:   "get",
+				Subject:  "user:example",
+				Context: map[string]interface{}{
+					"": nil,
+				},
+			},
+			CanAccess: true,
+		},
+	}
+
+	for i, v := range tests {
+		err := w.IsAllowed(v.Request)
+
+		if err != nil && v.CanAccess {
+			t.Errorf("Test case %d failed. Error: %s", i, err.Error())
 		}
 	}
 }
