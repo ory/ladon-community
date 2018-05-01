@@ -1,3 +1,4 @@
+// The (new) redis manager is intended to look like the officially supported memory manager.
 package redis
 
 import (
@@ -22,93 +23,153 @@ func NewRedisManager(db *redis.Client, keyPrefix string) *RedisManager {
 	}
 }
 
-const redisPolicies = "ladon:policies"
-
 var (
-	redisPolicyExists = errors.New("Policy exists")
-	redisNotFound     = errors.New("Not found")
+	ErrPolicyExists  = errors.New("Policy exists")
+	ErrBadConversion = errors.New("Could not convert policy from redis")
 )
 
-func (m *RedisManager) redisPoliciesKey() string {
-	return m.keyPrefix + redisPolicies
+func (m *RedisManager) getKey(key string) string {
+	return m.keyPrefix + key
 }
 
 // Create a new policy to RedisManager
 func (m *RedisManager) Create(policy Policy) error {
-	payload, err := json.Marshal(policy)
+	key := m.getKey(policy.GetID())
+	if err := m.db.Get(key).Err(); err == nil {
+		return ErrPolicyExists
+	}
+
+	p, err := json.Marshal(policy)
 	if err != nil {
-		return errors.Wrap(err, "policy marshal failed")
+		return err
 	}
 
-	wasKeySet, err := m.db.HSetNX(m.redisPoliciesKey(), policy.GetID(), string(payload)).Result()
-	if !wasKeySet {
-		return errors.WithStack(redisPolicyExists)
-	} else if err != nil {
-		return errors.Wrap(err, "policy creation failed")
-	}
+	cmd := m.db.Set(key, p, 0)
 
+	if err := cmd.Err(); err != nil {
+		return err
+	}
 	return nil
 }
 
-// GetAll retrieves a all policy.
+// GetAll retrieves all policies. (Equivelant of db.keys + db.Mget)
 func (m *RedisManager) GetAll(limit int64, offset int64) (Policies, error) {
-	return nil, errors.New("not implemented")
+	keyscmd := m.db.Keys(m.getKey("*"))
+	if err := keyscmd.Err(); err != nil {
+		return nil, err
+	}
+
+	keys, err := keyscmd.Result()
+	if err != nil {
+		return nil, err
+	}
+
+	mgetcmd := m.db.MGet(keys...)
+	if err := mgetcmd.Err(); err != nil {
+		return nil, err
+	}
+
+	values := mgetcmd.Val()
+
+	policies := make(Policies, len(values))
+	for i, v := range values {
+		p := &DefaultPolicy{}
+		b, ok := v.([]byte)
+		if !ok {
+			return nil, errors.Wrapf(ErrBadConversion, "value %+v is not a byte array", v)
+		}
+		if err := json.Unmarshal(b, p); err != nil {
+			return nil, errors.Wrap(ErrBadConversion, err.Error())
+		}
+		policies[i] = p
+	}
+
+	if offset+limit > int64(len(policies)) {
+		limit = int64(len(policies))
+		offset = 0
+	}
+
+	return policies[offset:limit], nil
 }
 
 // Get retrieves a policy.
 func (m *RedisManager) Get(id string) (Policy, error) {
-	resp, err := m.db.HGet(m.redisPoliciesKey(), id).Bytes()
-	if err == redis.Nil {
-		return nil, redisNotFound
-	} else if err != nil {
-		return nil, errors.WithStack(err)
+	var (
+		key    = m.getKey(id)
+		cmd    = m.db.Get(key)
+		policy = &DefaultPolicy{}
+	)
+
+	if err := cmd.Err(); err != nil {
+		return nil, ErrNotFound
+	}
+	b, err := cmd.Bytes()
+	if err != nil {
+		return nil, err
 	}
 
-	return redisUnmarshalPolicy(resp)
+	if err := json.Unmarshal(b, policy); err != nil {
+		return nil, errors.Wrap(ErrBadConversion, err.Error())
+	}
+	return policy, nil
 }
 
 // Delete removes a policy.
 func (m *RedisManager) Delete(id string) error {
-	if err := m.db.HDel(m.redisPoliciesKey(), id).Err(); err != nil {
-		return errors.Wrap(err, "policy deletion failed")
+	key := m.getKey(id)
+	if err := m.db.Del(key).Err(); err != nil {
+		return err
 	}
 
 	return nil
 }
 
+// FindRequestCandidates returns candidates that could match the request object. It either returns
+// a set that exactly matches the request, or a superset of it. If an error occurs, it returns nil and
+// the error.
 func (m *RedisManager) FindRequestCandidates(r *Request) (Policies, error) {
-	var ps = Policies{}
-
-	iter := m.db.HScan(m.redisPoliciesKey(), 0, "", 0).Iterator()
-	for iter.Next() {
-		if !iter.Next() {
-			break
-		}
-
-		p, err := redisUnmarshalPolicy([]byte(iter.Val()))
-		if err != nil {
-			return nil, err
-		}
-
-		ps = append(ps, p)
+	keyscmd := m.db.Keys(m.getKey("*"))
+	if err := keyscmd.Err(); err != nil {
+		return nil, err
 	}
 
-	if err := iter.Err(); err != nil {
-		return nil, errors.WithStack(err)
+	keys, err := keyscmd.Result()
+	if err != nil {
+		return nil, err
 	}
 
-	return ps, nil
+	mgetcmd := m.db.MGet(keys...)
+	if err := mgetcmd.Err(); err != nil {
+		return nil, err
+	}
+
+	values := mgetcmd.Val()
+
+	policies := make(Policies, len(values))
+	for i, v := range values {
+		p := &DefaultPolicy{}
+		b, ok := v.([]byte)
+		if !ok {
+			return nil, errors.Wrapf(ErrBadConversion, "value %+v is not a byte array", v)
+		}
+		if err := json.Unmarshal(b, p); err != nil {
+			return nil, errors.Wrap(ErrBadConversion, err.Error())
+		}
+		policies[i] = p
+	}
+
+	return policies, nil
 }
 
 func (m *RedisManager) Update(policy Policy) error {
-	return nil
-}
-
-func redisUnmarshalPolicy(policy []byte) (Policy, error) {
-	var p *DefaultPolicy
-	if err := json.Unmarshal(policy, &p); err != nil {
-		return nil, errors.Wrap(err, "policy unmarshal failed")
+	key := m.getKey(policy.GetID())
+	if err := m.db.Get(key).Err(); err != nil {
+		return ErrNotFound
 	}
 
-	return p, nil
+	if err := m.db.Set(key, policy, 0).Err(); err != nil {
+		return err
+	}
+
+	return nil
 }
