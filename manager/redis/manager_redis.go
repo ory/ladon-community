@@ -74,10 +74,10 @@ func (m *RedisManager) GetAll(limit int64, offset int64) (Policies, error) {
 	policies := make(Policies, len(values))
 	for i, v := range values {
 		p := &DefaultPolicy{}
-		b, ok := v.([]byte)
-		if !ok {
-			return nil, errors.Wrapf(ErrBadConversion, "value %+v is not a byte array", v)
-		}
+		b := []byte(v.(string))
+		// if !ok {
+		// 	return nil, errors.Wrapf(ErrBadConversion, "value %+v is not a byte array", v)
+		// }
 		if err := json.Unmarshal(b, p); err != nil {
 			return nil, errors.Wrap(ErrBadConversion, err.Error())
 		}
@@ -117,6 +117,9 @@ func (m *RedisManager) Get(id string) (Policy, error) {
 // Delete removes a policy.
 func (m *RedisManager) Delete(id string) error {
 	key := m.getKey(id)
+	if err := m.db.Get(key).Err(); err != nil {
+		return ErrNotFound
+	}
 	if err := m.db.Del(key).Err(); err != nil {
 		return err
 	}
@@ -148,10 +151,10 @@ func (m *RedisManager) FindRequestCandidates(r *Request) (Policies, error) {
 	policies := make(Policies, len(values))
 	for i, v := range values {
 		p := &DefaultPolicy{}
-		b, ok := v.([]byte)
-		if !ok {
-			return nil, errors.Wrapf(ErrBadConversion, "value %+v is not a byte array", v)
-		}
+		b := []byte(v.(string))
+		// if !ok {
+		// 	return nil, errors.Wrapf(ErrBadConversion, "value %+v is not a byte array", v)
+		// }
 		if err := json.Unmarshal(b, p); err != nil {
 			return nil, errors.Wrap(ErrBadConversion, err.Error())
 		}
@@ -166,8 +169,11 @@ func (m *RedisManager) Update(policy Policy) error {
 	if err := m.db.Get(key).Err(); err != nil {
 		return ErrNotFound
 	}
-
-	if err := m.db.Set(key, policy, 0).Err(); err != nil {
+	b, err := json.Marshal(policy)
+	if err != nil {
+		return errors.Wrap(ErrBadConversion, err.Error())
+	}
+	if err := m.db.Set(key, b, 0).Err(); err != nil {
 		return err
 	}
 
