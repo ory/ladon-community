@@ -194,14 +194,18 @@ func TestFindRequestCandidate(t *testing.T) {
 	policies := Policies{
 		&DefaultPolicy{
 			ID:         "test-policy-1",
+			Subjects:   []string{"ex1", "ex2"},
+			Resources:  []string{"exr1", "exr2"},
 			Conditions: Conditions{},
 		},
 		&DefaultPolicy{
 			ID:         "test-policy-2",
+			Subjects:   []string{"ex1", "ex2"},
 			Conditions: Conditions{},
 		},
 		&DefaultPolicy{
 			ID:         "test-policy-3",
+			Subjects:   []string{"ex3", "ex4"},
 			Conditions: Conditions{},
 		},
 	}
@@ -212,21 +216,21 @@ func TestFindRequestCandidate(t *testing.T) {
 		}
 	}
 
-	p, err := m.FindRequestCandidates(nil)
+	p, err := m.FindRequestCandidates(&Request{
+		Resource: "exr1",
+		Action:   "get",
+		Subject:  "ex1",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	for _, v := range policies {
-		if contains(p, v) != true {
-			t.Fatalf("Policy %+v not found in original", v)
-		}
+	if contains(p, policies[0]) != true {
+		t.Fatalf("Policy %+v not found in result of FindRequestCandidates", policies[0])
 	}
 
-	for _, v := range policies {
-		if contains(p, v) != true {
-			t.Fatalf("Policy %+v not found in returned policies", v)
-		}
+	if contains(p, policies[2]) {
+		t.Fatalf("Policy %+v was not expected from FindRequestCandidates", policies[2])
 	}
 }
 
