@@ -258,7 +258,7 @@ func TestFindPoliciesForResource(t *testing.T) {
 	}
 
 	if len(p) == 0 || contains(policies, p[0]) == false {
-		t.Fatalf("Policy %+v not found in result of FindRequestCandidates", p[0])
+		t.Fatalf("Policy %+v not found in result of FindPoliciesForResource", p[0])
 	}
 }
 
