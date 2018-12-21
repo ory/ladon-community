@@ -205,6 +205,7 @@ func (m *RedisManager) FindPoliciesForResource(resource string) (Policies, error
 		rKey    = prefixKey(m.keyPrefix, prefixResource, resource)
 		rGetCmd = m.db.HGetAll(rKey)
 	)
+
 	if err := rGetCmd.Err(); err != nil {
 		return nil, err
 	}
@@ -223,7 +224,7 @@ func (m *RedisManager) FindPoliciesForResource(resource string) (Policies, error
 		policies = append(policies, p)
 	}
 
-	return nil, nil
+	return policies, nil
 }
 
 // FindPoliciesForSubject returns policies that could match the subject. It either returns
