@@ -205,7 +205,6 @@ func (m *RedisManager) FindPoliciesForResource(resource string) (Policies, error
 		rKey    = prefixKey(m.keyPrefix, prefixResource, resource)
 		rGetCmd = m.db.HGetAll(rKey)
 	)
-
 	if err := rGetCmd.Err(); err != nil {
 		return nil, err
 	}
