@@ -234,6 +234,62 @@ func TestFindRequestCandidate(t *testing.T) {
 	}
 }
 
+func TestFindPoliciesForResource(t *testing.T) {
+	m := NewRedisManager(db, "findResource")
+
+	policies := Policies{
+		&DefaultPolicy{
+			ID:         "test-policy-1",
+			Subjects:   []string{"ex1", "ex2"},
+			Resources:  []string{"exr1", "exr2"},
+			Conditions: Conditions{},
+		},
+	}
+
+	for _, p := range policies {
+		if err := m.Create(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	p, err := m.FindPoliciesForResource("exr1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(p) == 0 || contains(policies, p[0]) == false {
+		t.Fatalf("Policy %+v not found in result of FindPoliciesForResource", p[0])
+	}
+}
+
+func TestFindPoliciesForSubject(t *testing.T) {
+	m := NewRedisManager(db, "FindPoliciesForSubject")
+
+	policies := Policies{
+		&DefaultPolicy{
+			ID:         "test-policy-1",
+			Subjects:   []string{"ex1", "ex2"},
+			Resources:  []string{"exr1", "exr2"},
+			Conditions: Conditions{},
+		},
+	}
+
+	for _, p := range policies {
+		if err := m.Create(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	p, err := m.FindPoliciesForSubject("ex1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(p) == 0 || contains(policies, p[0]) == false {
+		t.Fatalf("Policy %+v not found in result of TestFindPoliciesForSubject", p[0])
+	}
+}
+
 func TestWithWarden(t *testing.T) {
 	m := NewRedisManager(db, "create")
 	w := &Ladon{

@@ -195,6 +195,68 @@ func (m *RedisManager) Delete(id string) error {
 	return nil
 }
 
+// FindPoliciesForResource returns policies that could match the resource. It either returns
+// a set of policies that apply to the resource, or a superset of it.
+// If an error occurs, it returns nil and the error.
+func (m *RedisManager) FindPoliciesForResource(resource string) (Policies, error) {
+	policies := Policies{}
+
+	var (
+		rKey    = prefixKey(m.keyPrefix, prefixResource, resource)
+		rGetCmd = m.db.HGetAll(rKey)
+	)
+	if err := rGetCmd.Err(); err != nil {
+		return nil, err
+	}
+
+	rPolicies, err := rGetCmd.Result()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, v := range rPolicies {
+		p := &DefaultPolicy{}
+		b := []byte(v)
+		if err := json.Unmarshal(b, p); err != nil {
+			return nil, errors.Wrap(ErrBadConversion, err.Error())
+		}
+		policies = append(policies, p)
+	}
+
+	return policies, nil
+}
+
+// FindPoliciesForSubject returns policies that could match the subject. It either returns
+// a set of policies that applies to the subject, or a superset of it.
+// If an error occurs, it returns nil and the error.
+func (m *RedisManager) FindPoliciesForSubject(subject string) (Policies, error) {
+	policies := Policies{}
+
+	var (
+		sKey    = prefixKey(m.keyPrefix, prefixSubject, subject)
+		sGetCmd = m.db.HGetAll(sKey)
+	)
+	if err := sGetCmd.Err(); err != nil {
+		return nil, err
+	}
+
+	sPolicies, err := sGetCmd.Result()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, v := range sPolicies {
+		p := &DefaultPolicy{}
+		b := []byte(v)
+		if err := json.Unmarshal(b, p); err != nil {
+			return nil, errors.Wrap(ErrBadConversion, err.Error())
+		}
+		policies = append(policies, p)
+	}
+
+	return policies, nil
+}
+
 // FindRequestCandidates returns candidates that could match the request object. It either returns
 // a set that exactly matches the request, or a superset of it. If an error occurs, it returns nil and
 // the error.
